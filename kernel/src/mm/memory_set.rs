@@ -325,6 +325,18 @@ pub fn init_kernel_aspace() {
         MemFlags::READ | MemFlags::WRITE,
         "physical memory",
     );
+
+    use crate::test::pci::HDBAR;
+    unsafe {
+        debug!("this is map head bar {:#x}", HDBAR as usize);
+        map_range(
+            phys_to_virt(HDBAR as usize),
+            phys_to_virt(HDBAR as usize + 0x1000),
+            MemFlags::READ | MemFlags::WRITE | MemFlags::DEVICE,
+            "HDBAR",
+        );
+    }
+
     for (base, size) in MMIO_REGIONS {
         map_range(
             phys_to_virt(*base),

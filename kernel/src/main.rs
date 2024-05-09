@@ -25,6 +25,7 @@ mod platform;
 mod sync;
 mod syscall;
 mod task;
+mod test;
 mod timer;
 mod utils;
 
@@ -81,9 +82,11 @@ pub fn rust_main() -> ! {
     arch::init_percpu();
     percpu::init_percpu_early();
 
+    test::pci::pci_init();
     mm::init();
     drivers::init();
 
+    test::pci::pci_main();
     percpu::init_percpu();
     timer::init();
     task::init();
