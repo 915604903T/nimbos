@@ -170,6 +170,47 @@ unsafe fn pci_msi_set_vector(bdf: u16, vector: u32) {
     pci_write_config(bdf, cap + 0x02, 0x0001, 2);
 }
 
+unsafe fn pci_msix_init(bdf: u16, vector: u32) {
+    println!("pci_msix_init");
+    let cap = pci_find_cap(bdf, PCI_CAP_MSIX);
+    if cap < 0 {
+        return;
+    }
+    let cap = cap as u32;
+    let msix_table_offset = pci_read_config(bdf, cap + 0x04, 4) & 0xfffffff8;
+    let msix_pba_offset = pci_read_config(bdf, cap + 0x08, 4) & 0xfffffff8;
+    let msix_entries = (pci_read_config(bdf, cap + 0x02, 2) & 0x07ff) + 1; // message control: The number of table entries is the <value read> + 1.
+
+    let bar_msix_idx = PCI_CFG_BAR as u32 + 0x4;    // 0x14 BAR1
+    let bar_msix = pci_read_config(bdf, bar_msix_idx, 4);
+    println!(
+        "msix_table_offset: {:#x} msix_pba_offset: {:#x} bar msix:{:#x}",
+        msix_table_offset, msix_pba_offset, bar_msix,
+    );
+
+    for i in 0..msix_entries {
+        let base = msix_table_offset + i * 16 + bar_msix;
+        println!(
+            "write msix entry: base: {:#x} write msg addr:{:#x}",
+            base,
+            0xfee00000 | (1 << 12) as u32
+        );
+        mmio_write32(base as *mut u32, 0xfee00000 | (1 << 12) as u32); // hardcode core 1 for nimbos
+        println!("write msix entry: base: {:#x} write upper msg addr 0", base);
+        mmio_write32((base + 0x04) as *mut u32, 0);
+        println!(
+            "write msix entry: base: {:#x} write msg data: {:#x}",
+            base, vector
+        );
+        mmio_write32((base + 0x08) as *mut u32, vector);
+        println!("write msix entry: base: {:#x} vector control 0", base);
+        mmio_write32((base + 0x08) as *mut u32, 0);
+    }
+
+    let ctl = pci_read_config(bdf, cap, 2);
+    pci_write_config(bdf, cap, ctl | 0x8000, 2);
+}
+
 fn irq_handler() {
     unsafe {
         let statests = read_volatile(HDBAR.offset(HDA_STATESTS as isize));
@@ -213,8 +254,8 @@ pub fn pci_init() {
         HDBAR = (bar & !0xf) as *mut u64;
 
         println!("HDBAR: {:#x}", HDBAR as u64);
-
-        pci_msi_set_vector(bdf, IRQ_VECTOR);
+        // pci_msix_init(bdf, IRQ_VECTOR);
+        // pci_msi_set_vector(bdf, IRQ_VECTOR);
 
         pci_write_config(
             bdf,
