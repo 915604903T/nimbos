@@ -82,11 +82,10 @@ pub fn rust_main() -> ! {
     arch::init_percpu();
     percpu::init_percpu_early();
 
-    test::pci::pci_init();
     mm::init();
     drivers::init();
 
-    test::pci::pci_main();
+    test::pci::pci_init();
     percpu::init_percpu();
     timer::init();
     task::init();

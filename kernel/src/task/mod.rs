@@ -11,6 +11,7 @@ use core::sync::atomic::{AtomicBool, Ordering};
 use self::manager::TASK_MANAGER;
 use self::structs::ROOT_TASK;
 use crate::arch::instructions;
+use crate::test::pci::pci_main;
 
 static TASK_INITED: AtomicBool = AtomicBool::new(false);
 
@@ -75,6 +76,8 @@ pub fn spawn_task(task: Arc<Task>) {
 pub fn run() -> ! {
     println!("Running tasks...");
     instructions::enable_irqs();
+    println!("running pci main");
+    pci_main();
     current().yield_now(); // current task is idle at this time
     loop {
         current().yield_now();

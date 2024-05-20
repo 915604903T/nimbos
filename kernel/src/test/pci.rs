@@ -35,6 +35,10 @@ unsafe fn mmio_read16(address: *const u16) -> u16 {
     read_volatile(address)
 }
 
+unsafe fn mmio_read32(address: *const u32) -> u32 {
+    read_volatile(address)
+}
+
 unsafe fn mmio_write16(address: *mut u16, value: u16) {
     write_volatile(address, value);
 }
@@ -181,7 +185,7 @@ unsafe fn pci_msix_init(bdf: u16, vector: u32) {
     let msix_pba_offset = pci_read_config(bdf, cap + 0x08, 4) & 0xfffffff8;
     let msix_entries = (pci_read_config(bdf, cap + 0x02, 2) & 0x07ff) + 1; // message control: The number of table entries is the <value read> + 1.
 
-    let bar_msix_idx = PCI_CFG_BAR as u32 + 0x4;    // 0x14 BAR1
+    let bar_msix_idx = PCI_CFG_BAR as u32 + 0x4; // 0x14 BAR1
     let bar_msix = pci_read_config(bdf, bar_msix_idx, 4);
     println!(
         "msix_table_offset: {:#x} msix_pba_offset: {:#x} bar msix:{:#x}",
@@ -189,7 +193,7 @@ unsafe fn pci_msix_init(bdf: u16, vector: u32) {
     );
 
     for i in 0..msix_entries {
-        let base = msix_table_offset + i * 16 + bar_msix;
+        let base = phys_to_virt((msix_table_offset + i * 16 + bar_msix) as usize);
         println!(
             "write msix entry: base: {:#x} write msg addr:{:#x}",
             base,
@@ -204,18 +208,27 @@ unsafe fn pci_msix_init(bdf: u16, vector: u32) {
         );
         mmio_write32((base + 0x08) as *mut u32, vector);
         println!("write msix entry: base: {:#x} vector control 0", base);
-        mmio_write32((base + 0x08) as *mut u32, 0);
+        mmio_write32((base + 0x0c) as *mut u32, 0);
+
+        // let msg_addr =  mmio_read32(base as *mut u32);
+        // let msg_upper_addr =  mmio_read32((base + 0x04) as *mut u32);
+        // let msg_data =  mmio_read32((base + 0x08) as *mut u32);
+        // let msg_control =  mmio_read32((base + 0x0c) as *mut u32);
+        // println!("read msix entry: msg_addr: {:#x} msg_upper_addr: {:#x} msg_data: {:#x} msg_control: {:#x}", msg_addr, msg_upper_addr, msg_data, msg_control);
     }
 
-    let ctl = pci_read_config(bdf, cap, 2);
-    pci_write_config(bdf, cap, ctl | 0x8000, 2);
+    let ctl = pci_read_config(bdf, cap + 0x2, 2);
+    pci_write_config(bdf, cap + 0x2, ctl | 0x8000, 2);
 }
 
 fn irq_handler() {
     unsafe {
-        let statests = read_volatile(HDBAR.offset(HDA_STATESTS as isize));
-        debug!("HDA MSI received (STATESTS: {:04x})", statests);
-        write_volatile(HDBAR.offset(HDA_STATESTS as isize), statests);
+        let addr_u16 = phys_to_virt(HDBAR as usize) as *mut u16;
+        let statests = read_volatile(addr_u16.offset(HDA_STATESTS as isize));
+        println!(
+            "[pci irq handler] HDA MSI received (STATESTS: {:04x})",
+            statests
+        );
     }
 }
 
@@ -254,7 +267,8 @@ pub fn pci_init() {
         HDBAR = (bar & !0xf) as *mut u64;
 
         println!("HDBAR: {:#x}", HDBAR as u64);
-        // pci_msix_init(bdf, IRQ_VECTOR);
+
+        pci_msix_init(bdf, IRQ_VECTOR);
         // pci_msi_set_vector(bdf, IRQ_VECTOR);
 
         pci_write_config(
@@ -268,6 +282,14 @@ pub fn pci_init() {
 
 pub fn pci_main() {
     println!("this is pci main");
+
+    let bdf = pci_find_device(PCI_ID_ANY as u16, PCI_ID_ANY as u16, 0);
+    if bdf < 0 {
+        println!("No device found!");
+        return;
+    }
+    let bdf = bdf as u16;
+
     unsafe {
         let addr_u16 = phys_to_virt(HDBAR as usize) as *mut u16;
         // let addr_u16 = HDBAR as *mut u16;
@@ -282,13 +304,11 @@ pub fn pci_main() {
 
         mmio_write16(addr_u16.offset(HDA_WAKEEN as isize), 0x0f);
         let value = mmio_read16(addr_u16.offset(HDA_WAKEEN as isize));
-        println!(
-            "!!!!!!!!!!!!after write HDA_WAKEEN write value: {:#x}",
-            value
-        );
+        println!("after write HDA_WAKEEN write value: {:#x}", value);
 
         let addr_u32 = phys_to_virt(HDBAR as usize) as *mut u32;
-        // let addr_u32 = HDBAR as *mut u32;
         mmio_write32(addr_u32.offset(HDA_INTCTL as isize), (1 << 31) | (1 << 30));
+
+        pci_write_config(bdf, 0xd as u32, 0, 1);
     }
 }
