@@ -199,7 +199,8 @@ unsafe fn pci_msix_init(bdf: u16, vector: u32) {
             base,
             0xfee00000 | (1 << 12) as u32
         );
-        mmio_write32(base as *mut u32, 0xfee00000 | (1 << 12) as u32); // hardcode core 1 for nimbos
+        let current_cpu = PerCpu::current_cpu_id();
+        mmio_write32(base as *mut u32, 0xfee00000 | (current_cpu << 12) as u32);
         println!("write msix entry: base: {:#x} write upper msg addr 0", base);
         mmio_write32((base + 0x04) as *mut u32, 0);
         println!(

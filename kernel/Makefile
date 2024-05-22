@@ -128,6 +128,6 @@ debug: build
 	$(GDB) $(kernel_elf) -ex 'target remote localhost:1234'
 
 scp:
-	scp -P 2333 $(kernel_bin) ubuntu@localhost:/home/ubuntu/nimbos-x86.bin
+	scp -P 2334 $(kernel_bin) ubuntu@localhost:/home/ubuntu/nimbos-x86.bin
 
 .PHONY: build env kernel user clean disasm run debug scp
